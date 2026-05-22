@@ -67,6 +67,7 @@ playwright-report/
 test-results/
 videos/
 screenshots-tmp/
+packages/ollivelogs-js/coverage/
 
 # Local infra state
 volumes/
