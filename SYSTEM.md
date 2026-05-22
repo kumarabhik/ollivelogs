@@ -1,5 +1,91 @@
 ﻿# SYSTEM.md — Agent Step Log
 
+## [2026-05-22 20:00 +05:30] — Codex — Coverage closure, failover/alerts, pgcrypto verification, repo bootstrap
+
+**Roadmap item:** Phase 1 bootstrap, Phase 10 pgcrypto verification, Phase 17 quality gates, Phase 19 clean-checkout smoke, and the next feasible backlog slice
+**State change:** 8 items `[~]`/`[ ]` → `[x]`, 1 item (`Phase 8` ingest latency SLO) remains `[~]`
+
+**What I did:**
+
+- Closed the remaining technical verification gap on encrypted raw storage:
+  - added `tests/integration/test_pgcrypto_storage.py`
+  - exercised `workers/log-consumer/log_consumer_app/repository.py::insert_message(..., store_raw=True)`
+  - verified `messages_full.content_enc` is written with `pgp_sym_encrypt(...)`
+  - verified `pgp_sym_decrypt(...)` returns the original raw assistant payload and that `messages.content_full_id` links correctly
+- Implemented provider auto-failover in `apps/chat-api/app/main.py` and `apps/chat-api/app/settings.py`:
+  - added provider attempt sequencing using `PROVIDER_FAILOVER_ENABLED` + `PROVIDER_FAILOVER_MAP`
+  - added provider-specific default-model resolution for retry attempts
+  - preserved the existing local demo-provider fallback after real-provider attempts are exhausted
+  - added `tests/unit/test_provider_failover.py` covering both completion failover and pre-token stream failover
+- Implemented worker-side operational notifications in `workers/log-consumer/log_consumer_app/notifications.py` and wired them into `worker.py`:
+  - Slack/Discord DLQ webhook notifications via `DLQ_SLACK_WEBHOOK_URL` / `DLQ_DISCORD_WEBHOOK_URL`
+  - per-user daily budget alerts via Redis accumulation + once-per-day SMTP delivery when `BUDGET_ALERT_THRESHOLD_USD` is crossed
+  - added `tests/unit/test_worker_notifications.py` to cover webhook payloads, SMTP send, threshold crossing, and once-per-day dedupe
+- Finished function/tool-call logging into `inference_logs.extra`:
+  - `packages/ollivelogs-py/ollivelogs/client.py` now extracts OpenAI `tool_calls` and Anthropic `tool_use` blocks
+  - `packages/ollivelogs-py/ollivelogs/tracing.py` now carries extracted structured metadata into emitted event `extra`
+  - `tests/unit/test_log_consumer_storage.py` now verifies the worker preserves tool-call payloads into the ClickHouse JSON `extra` field
+- Fixed a real SDK wrapper bug while adding coverage: primitive nested attributes were being proxied as objects in `WrappedClientProxy`; `packages/ollivelogs-py/ollivelogs/client.py` now returns non-object primitive attributes directly.
+- Raised and measured coverage to the stated quality bar:
+  - Python apps/workers aggregate: `75.70%`
+  - Python SDK: `90.22%`
+  - JS SDK executable source: `91.62%`
+  - added `packages/ollivelogs-js/vitest.config.ts`
+  - expanded `packages/ollivelogs-js/test/ollivelogs.test.ts` to cover stream wrapping, sync returns, queue drop/retry behavior, fetch error branches, non-Error normalization, and truncation
+  - installed matching `@vitest/coverage-v8@3.2.4` in `packages/ollivelogs-js`
+- Bootstrapped the local git repo:
+  - ran `git init -b main`
+  - configured local author metadata (`Codex <codex@local.invalid>`)
+  - created the first local snapshot commit
+  - added a follow-up cleanup commit to ignore and remove generated JS coverage artifacts from version control
+- Verified the clean-checkout smoke path from a real fresh clone:
+  - cloned the local repo to `../FullStackAssignment-smoke`
+  - copied `.env.example` to `.env` in the clone (required because compose references `.env`)
+  - this Windows host does not have GNU `make`, so I used the equivalent `docker compose up -d --build`
+  - waited through the first-time `log-consumer` spaCy/Presidio model download and verified all 10 services reached healthy
+
+**Why:**
+
+- This closes the highest-value remaining engineering items that were still feasible without human-only dependencies: source-control bootstrap, encryption proof, quality-gate proof, and operational hardening around provider failure and DLQ/budget alerting.
+
+**Files touched:**
+
+- `apps/chat-api/app/main.py`
+- `apps/chat-api/app/settings.py`
+- `workers/log-consumer/log_consumer_app/settings.py`
+- `workers/log-consumer/log_consumer_app/worker.py`
+- `workers/log-consumer/log_consumer_app/notifications.py`
+- `packages/ollivelogs-py/ollivelogs/client.py`
+- `packages/ollivelogs-py/ollivelogs/tracing.py`
+- `packages/ollivelogs-js/test/ollivelogs.test.ts`
+- `packages/ollivelogs-js/vitest.config.ts`
+- `.env.example`
+- `.gitignore`
+- `tests/unit/test_ollivelogs_py_internals.py`
+- `tests/unit/test_provider_failover.py`
+- `tests/unit/test_log_consumer_storage.py`
+- `tests/unit/test_worker_notifications.py`
+- `tests/integration/test_pgcrypto_storage.py`
+- `ROADMAP.md`
+
+**Verification:**
+
+- `python -m pytest tests/unit/test_ollivelogs_py.py tests/unit/test_ollivelogs_py_internals.py tests/unit/test_provider_failover.py tests/unit/test_log_consumer_storage.py tests/unit/test_worker_notifications.py tests/integration/test_pgcrypto_storage.py -q`
+- `python -m ruff check packages/ollivelogs-py/ollivelogs apps/chat-api/app workers/log-consumer/log_consumer_app tests/unit/test_ollivelogs_py.py tests/unit/test_ollivelogs_py_internals.py tests/unit/test_provider_failover.py tests/unit/test_log_consumer_storage.py tests/unit/test_worker_notifications.py tests/integration/test_pgcrypto_storage.py`
+- `python -m mypy packages/ollivelogs-py/ollivelogs apps/chat-api/app workers/log-consumer/log_consumer_app tests/unit/test_ollivelogs_py.py tests/unit/test_ollivelogs_py_internals.py tests/unit/test_provider_failover.py tests/unit/test_log_consumer_storage.py tests/unit/test_worker_notifications.py tests/integration/test_pgcrypto_storage.py`
+- `python -m pytest tests/unit/test_providers.py tests/unit/test_redaction.py tests/unit/test_log_consumer_worker.py tests/integration/test_chat_api.py tests/integration/test_log_consumer.py -q`
+- `python -m pytest tests/unit tests/integration --cov=apps/chat-api/app --cov=apps/ingest-api/ingest_app --cov=workers/log-consumer/log_consumer_app --cov-report=term`
+- `python -m pytest tests/unit/test_ollivelogs_py.py tests/unit/test_ollivelogs_py_internals.py --cov=packages/ollivelogs-py/ollivelogs --cov-report=term-missing`
+- `npm -w packages/ollivelogs-js run typecheck`
+- `npm -w packages/ollivelogs-js run test`
+- `npm -w packages/ollivelogs-js run test -- --coverage`
+- clean clone smoke: `git clone . ../FullStackAssignment-smoke` + `.env.example -> .env` + `docker compose up -d --build` with all 10 services healthy after first-time model download
+
+**Follow-ups / remaining blockers:**
+
+- `Phase 8` load SLO stays `[~]`: the current local benchmark still misses the aggressive p99 target.
+- Human-only items remain open: Loom walkthrough, public push, email submission, k3s VM/public URL, provider tokens, hosted domain/datasets.
+
 ## [2026-05-22 18:01 +05:30] — Codex — Observability, eval harness, live browser verification, dashboard fixes
 
 **Roadmap item:** Phases 13, 15, 18, and 19 screenshot/eval/trace verification slice

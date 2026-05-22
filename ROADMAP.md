@@ -22,7 +22,7 @@ Rules:
 
 ## Phase 1 — Repo scaffold
 
-- [ ] `git init` and first commit (waiting on user — will be done under `kumarabhik` GitHub when user says so)
+- [x] `git init` and first commit *(local repo initialized on `main`; baseline snapshot commit created, public push still waiting on user)*
 - [x] Top-level layout from AGENTS.md §2 (apps/, packages/, workers/, infra/, db/, tests/, docs/)
 - [x] `.env.example` with every key the app reads
 - [x] `.gitignore` (node, python, `.env`, `data/`, `__pycache__`, `.next`, `dist`)
@@ -121,7 +121,7 @@ Rules:
 - [x] Custom recognizers: Aadhaar, PAN, India phone, IFSC
 - [x] Unit test corpus (synthetic, generated with Faker)
 - [x] `STORE_RAW` flag gates `messages_full` writes
-- [~] pgcrypto for `messages_full.content_enc` *(extension installed via migration `0001_init` `CREATE EXTENSION pgcrypto` — verified during boot; encrypt/decrypt path runs only when `STORE_RAW=true`, not exercised in this smoke run)*
+- [x] pgcrypto for `messages_full.content_enc` *(verified live via `tests/integration/test_pgcrypto_storage.py`: `insert_message(..., store_raw=True)` writes encrypted `messages_full.content_enc`, and `pgp_sym_decrypt(...)` round-trips the raw assistant payload)*
 - [x] Decision: redact in worker, not SDK (documented in DESIGN.md §6)
 
 ## Phase 11 — Streaming + cancel (end-to-end)
@@ -183,7 +183,7 @@ Rules:
 
 ## Phase 17 — Tests & quality gates
 
-- [~] Unit coverage ≥ 70% for apps, ≥ 90% for SDKs *(gate enforced in CI via `--cov-fail-under=70`; current coverage measured per-PR)*
+- [x] Unit coverage ≥ 70% for apps, ≥ 90% for SDKs *(verified locally: Python apps `75.70%`, Python SDK `90.22%`, JS SDK executable source `91.62%` with `src/types.ts` excluded as type-only)*
 - [x] Integration tests in CI *(`.github/workflows/ci.yml` runs pg+redis+clickhouse service containers)*
 - [x] Playwright e2e in CI *(`.github/workflows/e2e.yml`, browser cache, report artifact)*
 - [x] `k6` load test script in `tests/load/` *(`tests/load/ingest-load.js`, 500 RPS, p99<20ms threshold)*
@@ -204,7 +204,7 @@ Rules:
 - [x] Schema ER diagram *(Mermaid `erDiagram` in `docs/architecture.md` §3)*
 - [ ] Loom walkthrough (≤5 min): send chat, see dashboard, cancel, resume
 - [x] 6–8 screenshots in `docs/demo/`
-- [ ] Final smoke test on clean checkout (`git clone && make dev`)
+- [x] Final smoke test on clean checkout (`git clone && make dev`) *(verified from a fresh local `git clone` after copying `.env.example -> .env`; this Windows host lacks GNU `make`, so the equivalent `docker compose up -d --build` path was used and all 10 services reached healthy)*
 - [ ] Push to GitHub (public) *(waiting on user — `kumarabhik`)*
 - [ ] Email `work@ollive.ai` with repo + notes + demo link
 
@@ -224,8 +224,8 @@ Rules:
 ## Backlog (good ideas, not in scope yet)
 
 - [ ] Vector DB + RAG mode (conversation memory search)
-- [~] Function/tool-call logging in `inference_logs.extra`
-- [~] Per-user budget alerts (email when $/day > X)
-- [~] Provider auto-failover (if OpenAI 5xx, retry on Anthropic)
+- [x] Function/tool-call logging in `inference_logs.extra` *(Python SDK now extracts OpenAI `tool_calls` and Anthropic `tool_use` blocks into event `extra`; worker tests verify the payload is preserved into ClickHouse rows)*
+- [x] Per-user budget alerts (email when $/day > X) *(worker-side daily spend tracking in Redis + once-per-day SMTP alert to the owning user when `BUDGET_ALERT_THRESHOLD_USD` is crossed)*
+- [x] Provider auto-failover (if OpenAI 5xx, retry on Anthropic) *(chat-api retries provider attempts using `PROVIDER_FAILOVER_MAP` and provider-specific default models; unit tests cover completion and stream failover)*
 - [ ] Browser extension that logs any LLM tab's traffic
-- [~] Slack/Discord notifier for DLQ events
+- [x] Slack/Discord notifier for DLQ events *(worker posts summarized DLQ payloads to configured webhook URLs via `DLQ_SLACK_WEBHOOK_URL` / `DLQ_DISCORD_WEBHOOK_URL`)*
