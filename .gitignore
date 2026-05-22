@@ -1,0 +1,79 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.log
+.venv/
+venv/
+env/
+ENV/
+
+# Node / JS
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.eslintcache
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# OS
+desktop.ini
+
+# Docker
+.docker/
+
+# Data (datasets, models, generated samples)
+data/
+*.parquet
+*.arrow
+*.h5
+models/
+
+# Playwright / test artifacts
+playwright-report/
+test-results/
+videos/
+screenshots-tmp/
+
+# Local infra state
+volumes/
+*.sqlite
+*.sqlite3
+*.db
+
+# Misc
+tmp/
+.cache/

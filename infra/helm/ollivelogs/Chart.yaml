@@ -1,0 +1,22 @@
+apiVersion: v2
+name: ollivelogs
+description: |
+  OlliveLogs — multi-provider LLM chat + inference logging platform.
+  Deploys chat-api, ingest-api, log-consumer worker, web console, plus
+  Postgres / Redis / ClickHouse / Prometheus / Loki / Grafana / OTel.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - llm
+  - observability
+  - logging
+  - fastapi
+  - nextjs
+maintainers:
+  - name: Abhishek Kumar
+    email: kumaravi1098@gmail.com
+sources:
+  - https://github.com/kumarabhik/ollivelogs
+icon: https://avatars.githubusercontent.com/u/0
+home: https://github.com/kumarabhik/ollivelogs

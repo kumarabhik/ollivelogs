@@ -1,0 +1,132 @@
+{
+  "title": "OlliveLogs · Cost & Tokens",
+  "uid": "ol-cost-tokens",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "tags": ["ollivelogs", "llm", "cost"],
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "provider",
+        "type": "query",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+        "query": "SELECT DISTINCT provider FROM ollivelogs.inference_logs ORDER BY provider",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Spend (last 24h)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT sum(cost_usd) FROM ollivelogs.inference_logs WHERE ts > now() - INTERVAL 24 HOUR AND provider IN ($provider)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Tokens out (24h)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT sum(completion_tokens) FROM ollivelogs.inference_logs WHERE ts > now() - INTERVAL 24 HOUR AND provider IN ($provider)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Cost per 1K tokens",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT 1000 * sum(cost_usd) / clamp_min(sum(total_tokens), 1) FROM ollivelogs.inference_logs WHERE ts > now() - INTERVAL 24 HOUR AND provider IN ($provider)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 6 } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Active conversations (24h)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT uniqExact(conversation_id) FROM ollivelogs.inference_logs WHERE ts > now() - INTERVAL 24 HOUR AND provider IN ($provider)"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "$ / minute by provider",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT $__timeInterval(ts) AS t, provider, sum(cost_usd) AS cost FROM ollivelogs.inference_logs WHERE $__timeFilter(ts) AND provider IN ($provider) GROUP BY t, provider ORDER BY t"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Tokens / minute (prompt vs completion)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT $__timeInterval(ts) AS t, sum(prompt_tokens) AS prompt, sum(completion_tokens) AS completion FROM ollivelogs.inference_logs WHERE $__timeFilter(ts) AND provider IN ($provider) GROUP BY t ORDER BY t"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "table",
+      "title": "Top 10 conversations by spend",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT conversation_id, sum(cost_usd) AS spend, sum(total_tokens) AS tokens, count() AS calls FROM ollivelogs.inference_logs WHERE $__timeFilter(ts) AND provider IN ($provider) GROUP BY conversation_id ORDER BY spend DESC LIMIT 10"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "barchart",
+      "title": "Spend by model",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT model, sum(cost_usd) AS cost FROM ollivelogs.inference_logs WHERE $__timeFilter(ts) AND provider IN ($provider) GROUP BY model ORDER BY cost DESC LIMIT 15"
+        }
+      ]
+    }
+  ]
+}

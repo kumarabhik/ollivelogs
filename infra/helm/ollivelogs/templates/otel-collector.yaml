@@ -1,0 +1,116 @@
+{{- if .Values.otelCollector.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-otel-collector-config
+  namespace: {{ .Values.global.namespace }}
+data:
+  config.yml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      batch:
+        send_batch_size: 1024
+        timeout: 5s
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      resource:
+        attributes:
+          - key: cluster
+            value: {{ .Release.Name }}
+            action: upsert
+    exporters:
+      debug:
+        verbosity: basic
+        sampling_initial: 5
+        sampling_thereafter: 50
+      prometheus:
+        endpoint: 0.0.0.0:{{ .Values.otelCollector.prometheusPort }}
+        namespace: ollivelogs
+      otlphttp/loki:
+        endpoint: http://{{ .Release.Name }}-loki:{{ .Values.loki.port }}/otlp
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [debug]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [prometheus]
+        logs:
+          receivers: [otlp]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlphttp/loki, debug]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-otel-collector
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "otel-collector") | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "otel-collector") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "otel-collector") | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.otelCollector.prometheusPort }}"
+    spec:
+      containers:
+        - name: otel-collector
+          image: {{ .Values.otelCollector.image }}
+          args: ["--config=/etc/otelcol/config.yml"]
+          ports:
+            - name: otlp-grpc
+              containerPort: {{ .Values.otelCollector.grpcPort }}
+            - name: otlp-http
+              containerPort: {{ .Values.otelCollector.httpPort }}
+            - name: prom
+              containerPort: {{ .Values.otelCollector.prometheusPort }}
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otelcol
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-otel-collector
+  namespace: {{ .Values.global.namespace }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: otlp-grpc
+      port: {{ .Values.otelCollector.grpcPort }}
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: {{ .Values.otelCollector.httpPort }}
+      targetPort: otlp-http
+    - name: prom
+      port: {{ .Values.otelCollector.prometheusPort }}
+      targetPort: prom
+  selector:
+    {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "otel-collector") | nindent 4 }}
+{{- end }}

@@ -1,0 +1,90 @@
+{{- if .Values.chatApi.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-chat-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "chat-api") | nindent 4 }}
+spec:
+  replicas: {{ .Values.chatApi.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "chat-api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "chat-api") | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.chatApi.port }}"
+        prometheus.io/path: "{{ .Values.chatApi.metricsPath }}"
+    spec:
+      containers:
+        - name: chat-api
+          image: {{ include "ollive.image" (dict "Values" .Values "image" .Values.chatApi.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.chatApi.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.secrets.externalSecretName }}
+                optional: true
+            - secretRef:
+                name: {{ .Values.secrets.sessionSecretName }}
+                optional: true
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.chatApi.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-chat-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "chat-api") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.chatApi.port }}
+      targetPort: http
+  selector:
+    {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "chat-api") | nindent 4 }}
+{{- if .Values.chatApi.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-chat-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "chat-api") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-chat-api
+  minReplicas: {{ .Values.chatApi.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.chatApi.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.chatApi.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

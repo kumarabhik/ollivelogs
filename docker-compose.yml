@@ -1,0 +1,245 @@
+# OlliveLogs — full local stack
+# Bring up:    docker compose up -d --build   (or: make dev)
+# Tear down:   docker compose down            (or: make down)
+# Wipe data:   docker compose down -v         (or: make nuke)
+
+name: ollivelogs
+
+x-app-env: &app-env
+  env_file:
+    - .env
+
+networks:
+  ollivelogs:
+    driver: bridge
+
+volumes:
+  pg-data:
+  redis-data:
+  clickhouse-data:
+  clickhouse-logs:
+  grafana-data:
+  prometheus-data:
+  loki-data:
+
+services:
+  # ───────────── data plane ─────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ol-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ollive}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ollive}
+      POSTGRES_DB: ${POSTGRES_DB:-ollivelogs}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ollive} -d ${POSTGRES_DB:-ollivelogs}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks: [ollivelogs]
+
+  redis:
+    image: redis:7-alpine
+    container_name: ol-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [ollivelogs]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: ol-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ollivelogs}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "${CLICKHOUSE_PORT:-8123}:8123"   # HTTP
+      - "9000:9000"                       # native
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks: [ollivelogs]
+
+  # ───────────── observability ─────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: ol-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [ollivelogs]
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: ol-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [ollivelogs]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: ol-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_INSTALL_PLUGINS: "grafana-clickhouse-datasource"
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [ollivelogs]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.108.0
+    container_name: ol-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yml"]
+    volumes:
+      - ./infra/otel/otel-collector-config.yml:/etc/otelcol/config.yml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus exposition
+    depends_on:
+      loki:
+        condition: service_healthy
+    networks: [ollivelogs]
+
+  # ───────────── application plane ─────────────
+  chat-api:
+    <<: *app-env
+    build:
+      context: .
+      dockerfile: apps/chat-api/Dockerfile
+    container_name: ol-chat-api
+    restart: unless-stopped
+    ports:
+      - "${CHAT_API_PORT:-8001}:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8001/healthz > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks: [ollivelogs]
+
+  ingest-api:
+    <<: *app-env
+    build:
+      context: .
+      dockerfile: apps/ingest-api/Dockerfile
+    container_name: ol-ingest-api
+    restart: unless-stopped
+    ports:
+      - "${INGEST_API_PORT:-8002}:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8002/healthz > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks: [ollivelogs]
+
+  log-consumer:
+    <<: *app-env
+    build:
+      context: .
+      dockerfile: workers/log-consumer/Dockerfile
+    container_name: ol-log-consumer
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      ingest-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8003/healthz > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks: [ollivelogs]

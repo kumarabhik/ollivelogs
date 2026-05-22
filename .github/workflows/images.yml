@@ -1,0 +1,73 @@
+name: images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build:
+    name: build · ${{ matrix.svc.image }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        svc:
+          - { image: ollivelogs-chat-api,    dockerfile: apps/chat-api/Dockerfile }
+          - { image: ollivelogs-ingest-api,  dockerfile: apps/ingest-api/Dockerfile }
+          - { image: ollivelogs-log-consumer, dockerfile: workers/log-consumer/Dockerfile }
+          - { image: ollivelogs-web,         dockerfile: apps/web/Dockerfile }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip if Dockerfile missing
+        id: check
+        run: |
+          if [ -f "${{ matrix.svc.dockerfile }}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Dockerfile missing: ${{ matrix.svc.dockerfile }} — skipping ${{ matrix.svc.image }}"
+          fi
+
+      - name: Metadata
+        if: steps.check.outputs.present == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.svc.image }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build + push
+        if: steps.check.outputs.present == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.svc.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.svc.image }}
+          cache-to: type=gha,scope=${{ matrix.svc.image }},mode=max
+          platforms: linux/amd64

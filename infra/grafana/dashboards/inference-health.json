@@ -1,0 +1,168 @@
+{
+  "title": "OlliveLogs · Inference Health",
+  "uid": "ol-inference-health",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "tags": ["ollivelogs", "llm", "health"],
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "name": "provider",
+        "type": "query",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+        "query": "SELECT DISTINCT provider FROM ollivelogs.inference_logs ORDER BY provider",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true
+      },
+      {
+        "name": "model",
+        "type": "query",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+        "query": "SELECT DISTINCT model FROM ollivelogs.inference_logs WHERE provider IN ($provider) ORDER BY model",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": true
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Requests / min",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(llm_request_total[1m])) * 60",
+          "refId": "A"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Error rate (%)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(llm_request_total{status=~\"error|timeout\"}[5m])) / clamp_min(sum(rate(llm_request_total[5m])), 1)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "p95 latency",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le)(rate(llm_latency_ms_bucket[5m])))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "p95 TTFT",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le)(rate(llm_ttft_ms_bucket[5m])))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Requests/sec by provider",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (provider)(rate(llm_request_total[1m]))",
+          "legendFormat": "{{provider}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Latency p50 / p95 / p99",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le)(rate(llm_latency_ms_bucket[5m])))",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le)(rate(llm_latency_ms_bucket[5m])))",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le)(rate(llm_latency_ms_bucket[5m])))",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 20,
+      "type": "timeseries",
+      "title": "Error count by kind (ClickHouse)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT $__timeInterval(ts) AS t, error_kind, count() AS errors FROM ollivelogs.inference_logs WHERE $__timeFilter(ts) AND status IN ('error','timeout') AND provider IN ($provider) AND model IN ($model) GROUP BY t, error_kind ORDER BY t"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "table",
+      "title": "Slowest 25 calls (ClickHouse)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT ts, provider, model, latency_ms, total_tokens, status FROM ollivelogs.inference_logs WHERE $__timeFilter(ts) AND provider IN ($provider) AND model IN ($model) ORDER BY latency_ms DESC LIMIT 25"
+        }
+      ]
+    }
+  ]
+}

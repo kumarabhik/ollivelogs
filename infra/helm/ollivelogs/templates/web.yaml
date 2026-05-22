@@ -1,0 +1,111 @@
+{{- if .Values.web.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-web
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 4 }}
+spec:
+  replicas: {{ .Values.web.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 8 }}
+    spec:
+      containers:
+        - name: web
+          image: {{ include "ollive.image" (dict "Values" .Values "image" .Values.web.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.web.port }}
+          env:
+            - name: CHAT_API_PROXY_TARGET
+              value: "http://{{ .Release.Name }}-chat-api.{{ .Values.global.namespace }}.svc.cluster.local:{{ .Values.chatApi.port }}"
+            - name: NODE_ENV
+              value: production
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.web.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-web
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.web.port }}
+      targetPort: http
+  selector:
+    {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "web") | nindent 4 }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.ingress.tls.enabled }}
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.tls.issuer | quote }}
+    {{- end }}
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Release.Name }}-tls
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.paths.chatApi }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-chat-api
+                port: { number: {{ .Values.chatApi.port }} }
+          - path: {{ .Values.ingress.paths.ingestApi }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-ingest-api
+                port: { number: {{ .Values.ingestApi.port }} }
+          {{- if .Values.grafana.enabled }}
+          - path: {{ .Values.ingress.paths.grafana }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-grafana
+                port: { number: {{ .Values.grafana.port }} }
+          {{- end }}
+          - path: {{ .Values.ingress.paths.web }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-web
+                port: { number: {{ .Values.web.port }} }
+{{- end }}

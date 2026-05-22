@@ -1,0 +1,48 @@
+[project]
+name = "ollivelogs-chat-api"
+version = "0.1.0"
+description = "OlliveLogs — chat API (FastAPI + Postgres + Redis + ClickHouse)"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.4",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    "psycopg2-binary>=2.9",
+    "alembic>=1.13",
+    "redis>=5.0",
+    "clickhouse-connect>=0.7",
+    "httpx>=0.27",
+    "itsdangerous>=2.2",
+    "pyyaml>=6.0",
+    "structlog>=24.1",
+    "prometheus-client>=0.20",
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-asyncpg>=0.48b0",
+    "opentelemetry-instrumentation-redis>=0.48b0",
+    "opentelemetry-instrumentation-httpx>=0.48b0",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "asgi-lifespan>=2.1",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "httpx>=0.27",
+    "ruff>=0.5",
+    "mypy>=1.10",
+]
+
+[project.scripts]
+ollive = "app.eval_cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]

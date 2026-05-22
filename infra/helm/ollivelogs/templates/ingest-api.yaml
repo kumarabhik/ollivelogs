@@ -1,0 +1,87 @@
+{{- if .Values.ingestApi.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-ingest-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "ingest-api") | nindent 4 }}
+spec:
+  replicas: {{ .Values.ingestApi.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "ingest-api") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "ingest-api") | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.ingestApi.port }}"
+        prometheus.io/path: "{{ .Values.ingestApi.metricsPath }}"
+    spec:
+      containers:
+        - name: ingest-api
+          image: {{ include "ollive.image" (dict "Values" .Values "image" .Values.ingestApi.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.ingestApi.port }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Release.Name }}-config
+            - secretRef:
+                name: {{ .Values.secrets.externalSecretName }}
+                optional: true
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.ingestApi.resources | nindent 12 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-ingest-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "ingest-api") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.ingestApi.port }}
+      targetPort: http
+  selector:
+    {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "ingest-api") | nindent 4 }}
+{{- if .Values.ingestApi.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-ingest-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "ingest-api") | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}-ingest-api
+  minReplicas: {{ .Values.ingestApi.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.ingestApi.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.ingestApi.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- end }}

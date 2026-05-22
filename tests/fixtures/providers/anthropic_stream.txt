@@ -1,0 +1,8 @@
+event: content_block_delta
+data: {"delta":{"type":"text_delta","text":"Hello "}}
+
+event: content_block_delta
+data: {"delta":{"type":"text_delta","text":"Anthropic"}}
+
+event: message_delta
+data: {"delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":3,"output_tokens":2}}

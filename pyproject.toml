@@ -1,0 +1,108 @@
+# Root pyproject — shared tool config for every Python package in the repo.
+# Each app/package keeps its own pyproject for its own deps; this one only
+# centralises ruff/black/mypy/pytest so behavior is identical everywhere.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "node_modules",
+    "**/migrations",
+]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",   # pycodestyle / pyflakes
+    "I",             # isort
+    "B",             # bugbear
+    "C4",            # comprehensions
+    "UP",            # pyupgrade
+    "SIM",           # simplify
+    "RUF",           # ruff-specific
+    "ASYNC",         # async sanity
+    "S",             # bandit security
+]
+ignore = [
+    "E501",          # let formatter handle long lines
+    "S101",          # assert in tests is fine
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"db/seed/**" = ["S"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+exclude = [
+    "build/",
+    "dist/",
+    ".venv/",
+    "node_modules/",
+    "tests/load/",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "tests.*",
+    "db.seed.*",
+]
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "asyncpg",
+    "asyncpg.*",
+    "ollivelogs",
+    "ollivelogs.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "yaml",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "clickhouse_connect",
+    "clickhouse_connect.*",
+    "opentelemetry.instrumentation.*",
+    "presidio_analyzer",
+    "presidio_analyzer.*",
+    "presidio_anonymizer",
+    "presidio_anonymizer.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra -q --strict-markers --tb=short"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: fast in-process tests",
+    "integration: requires docker services (postgres/redis/clickhouse)",
+    "slow: takes >2s",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["apps", "packages", "workers"]
+omit = ["**/migrations/**", "**/tests/**", "**/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 70

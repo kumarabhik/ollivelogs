@@ -1,0 +1,81 @@
+{{- if .Values.postgres.enabled }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-postgres
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "postgres") | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "postgres") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "postgres") | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: pg
+              containerPort: {{ .Values.postgres.port }}
+          env:
+            - name: POSTGRES_USER
+              value: ollive
+            - name: POSTGRES_DB
+              value: ollivelogs
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secrets.sessionSecretName }}
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "ollive", "-d", "ollivelogs"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "ollive"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "postgres") | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None  # headless for stable hostname
+  ports:
+    - name: pg
+      port: {{ .Values.postgres.port }}
+      targetPort: pg
+  selector:
+    {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "postgres") | nindent 4 }}
+{{- end }}

@@ -1,0 +1,151 @@
+# OlliveLogs Helm values — sized for a single 2vCPU / 4GB k3s VM by default.
+# Override per-environment via `-f values-prod.yaml` or `--set`.
+
+global:
+  namespace: ollivelogs
+  imageRegistry: ghcr.io/kumarabhik
+  imageTag: "0.1.0"
+  imagePullPolicy: IfNotPresent
+  storageClass: local-path   # k3s default
+
+# ─────────── Application services ───────────
+web:
+  enabled: true
+  replicas: 2
+  image: ollivelogs-web
+  port: 3000
+  resources:
+    requests: { cpu: 50m,  memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+chatApi:
+  enabled: true
+  replicas: 2
+  image: ollivelogs-chat-api
+  port: 8001
+  metricsPath: /metrics
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+
+ingestApi:
+  enabled: true
+  replicas: 2
+  image: ollivelogs-ingest-api
+  port: 8002
+  metricsPath: /metrics
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 60
+
+logConsumer:
+  enabled: true
+  replicas: 2
+  image: ollivelogs-log-consumer
+  port: 8003
+  metricsPath: /metrics
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits:   { cpu: 1500m, memory: 1500Mi }
+
+# ─────────── Data plane ───────────
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  port: 5432
+  storage: 20Gi
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  port: 6379
+  storage: 5Gi
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+clickhouse:
+  enabled: true
+  image: clickhouse/clickhouse-server:24-alpine
+  httpPort: 8123
+  nativePort: 9000
+  storage: 50Gi
+  resources:
+    requests: { cpu: 250m, memory: 768Mi }
+    limits:   { cpu: 1500m, memory: 2Gi }
+
+# ─────────── Observability ───────────
+prometheus:
+  enabled: true
+  image: prom/prometheus:v2.54.1
+  port: 9090
+  storage: 10Gi
+  retentionDays: 15
+
+loki:
+  enabled: true
+  image: grafana/loki:3.1.1
+  port: 3100
+  storage: 10Gi
+
+grafana:
+  enabled: true
+  image: grafana/grafana:11.2.0
+  port: 3000
+  storage: 5Gi
+  adminUser: admin
+  adminPassword: changeme-via-secret
+  anonymousViewer: true
+
+otelCollector:
+  enabled: true
+  image: otel/opentelemetry-collector-contrib:0.108.0
+  grpcPort: 4317
+  httpPort: 4318
+  prometheusPort: 8889
+
+# ─────────── Ingress / TLS ───────────
+ingress:
+  enabled: true
+  className: traefik
+  host: ollivelogs.local
+  tls:
+    enabled: true
+    issuer: letsencrypt-prod   # cert-manager ClusterIssuer
+  paths:
+    web: /
+    chatApi: /api/chat
+    ingestApi: /api/ingest
+    grafana: /grafana
+
+# ─────────── Providers / secrets ───────────
+# Real keys come from a separate Kubernetes Secret created out-of-band:
+#     kubectl -n ollivelogs create secret generic ollive-providers \
+#       --from-literal=HF_TOKEN=hf_xxx \
+#       --from-literal=OPENAI_API_KEY=sk-xxx \
+#       --from-literal=ANTHROPIC_API_KEY=sk-ant-xxx
+secrets:
+  externalSecretName: ollive-providers
+  sessionSecretName: ollive-session
+
+config:
+  defaultProvider: huggingface
+  defaultModel: Qwen/Qwen2.5-72B-Instruct
+  piiRedactionEnabled: true
+  storeRaw: false
+  rateLimitPerMin: 30
+  rateLimitTokensPerMin: 2000
+  chatContextTurns: 20

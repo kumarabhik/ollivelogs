@@ -1,0 +1,156 @@
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-datasources
+  namespace: {{ .Values.global.namespace }}
+data:
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://{{ .Release.Name }}-prometheus:{{ .Values.prometheus.port }}
+        isDefault: true
+        editable: false
+      - name: Loki
+        type: loki
+        access: proxy
+        url: http://{{ .Release.Name }}-loki:{{ .Values.loki.port }}
+        editable: false
+      - name: ClickHouse
+        type: grafana-clickhouse-datasource
+        access: proxy
+        editable: false
+        jsonData:
+          host: {{ .Release.Name }}-clickhouse
+          port: {{ .Values.clickhouse.nativePort }}
+          protocol: native
+          defaultDatabase: ollivelogs
+          username: default
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-dashboards-provider
+  namespace: {{ .Values.global.namespace }}
+data:
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: ollivelogs
+        orgId: 1
+        folder: OlliveLogs
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 30
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-grafana-dashboards
+  namespace: {{ .Values.global.namespace }}
+data:
+  inference-health.json: |
+    {{- .Files.Get "../../../infra/grafana/dashboards/inference-health.json" | nindent 4 }}
+  cost-tokens.json: |
+    {{- .Files.Get "../../../infra/grafana/dashboards/cost-tokens.json" | nindent 4 }}
+  ingestion-pipeline.json: |
+    {{- .Files.Get "../../../infra/grafana/dashboards/ingestion-pipeline.json" | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-grafana
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "grafana") | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-grafana
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "grafana") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "grafana") | nindent 8 }}
+    spec:
+      securityContext:
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: {{ .Values.grafana.image }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.grafana.port }}
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: {{ .Values.grafana.adminUser }}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: {{ .Values.grafana.adminPassword }}
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: {{ .Values.grafana.anonymousViewer | quote }}
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Viewer
+            - name: GF_INSTALL_PLUGINS
+              value: grafana-clickhouse-datasource
+            - name: GF_SERVER_ROOT_URL
+              value: "%(protocol)s://%(domain)s{{ .Values.ingress.paths.grafana }}"
+            - name: GF_SERVER_SERVE_FROM_SUB_PATH
+              value: "true"
+          readinessProbe:
+            httpGet: { path: /api/health, port: http }
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits:   { cpu: 500m, memory: 512Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/grafana
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+            - name: dashboards-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+      volumes:
+        - name: datasources
+          configMap:
+            name: {{ .Release.Name }}-grafana-datasources
+        - name: dashboards-provider
+          configMap:
+            name: {{ .Release.Name }}-grafana-dashboards-provider
+        - name: dashboards
+          configMap:
+            name: {{ .Release.Name }}-grafana-dashboards
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.grafana.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-grafana
+  namespace: {{ .Values.global.namespace }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.grafana.port }}
+      targetPort: http
+  selector:
+    {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "grafana") | nindent 4 }}
+{{- end }}

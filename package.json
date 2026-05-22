@@ -1,0 +1,32 @@
+{
+  "name": "ollivelogs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OlliveLogs — multi-provider LLM inference logging + ingestion system",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "apps/web",
+    "packages/ollivelogs-js",
+    "tests/e2e"
+  ],
+  "scripts": {
+    "dev": "npm -w apps/web run dev",
+    "build": "npm -w apps/web run build && npm -w packages/ollivelogs-js run build",
+    "lint": "npm -w apps/web run lint && npm -w packages/ollivelogs-js run lint",
+    "fmt": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
+    "typecheck": "npm -w apps/web run typecheck && npm -w packages/ollivelogs-js run typecheck",
+    "test": "npm -w packages/ollivelogs-js run test",
+    "e2e": "npm -w tests/e2e run test"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.5",
+    "typescript": "^5.4.5"
+  }
+}

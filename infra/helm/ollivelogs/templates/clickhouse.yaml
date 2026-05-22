@@ -1,0 +1,96 @@
+{{- if .Values.clickhouse.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-clickhouse-init
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "clickhouse") | nindent 4 }}
+data:
+  init.sql: |
+    {{- .Files.Get "../../../infra/clickhouse/init.sql" | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-clickhouse
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "clickhouse") | nindent 4 }}
+spec:
+  serviceName: {{ .Release.Name }}-clickhouse
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "clickhouse") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "clickhouse") | nindent 8 }}
+    spec:
+      securityContext:
+        fsGroup: 101
+      containers:
+        - name: clickhouse
+          image: {{ .Values.clickhouse.image }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.clickhouse.httpPort }}
+            - name: native
+              containerPort: {{ .Values.clickhouse.nativePort }}
+          env:
+            - name: CLICKHOUSE_DB
+              value: ollivelogs
+            - name: CLICKHOUSE_USER
+              value: default
+            - name: CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT
+              value: "1"
+          readinessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /ping, port: http }
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.clickhouse.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/clickhouse
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap:
+            name: {{ .Release.Name }}-clickhouse-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: {{ .Values.global.storageClass }}
+        resources:
+          requests:
+            storage: {{ .Values.clickhouse.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-clickhouse
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "ollive.componentLabels" (dict "Chart" .Chart "Release" .Release "component" "clickhouse") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.clickhouse.httpPort }}
+      targetPort: http
+    - name: native
+      port: {{ .Values.clickhouse.nativePort }}
+      targetPort: native
+  selector:
+    {{- include "ollive.componentSelector" (dict "Chart" .Chart "Release" .Release "component" "clickhouse") | nindent 4 }}
+{{- end }}
