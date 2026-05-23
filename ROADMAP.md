@@ -205,7 +205,7 @@ Rules:
 - [ ] Loom walkthrough (≤5 min): send chat, see dashboard, cancel, resume
 - [x] 6–8 screenshots in `docs/demo/`
 - [x] Final smoke test on clean checkout (`git clone && make dev`) *(verified from a fresh local `git clone` after copying `.env.example -> .env`; this Windows host lacks GNU `make`, so the equivalent `docker compose up -d --build` path was used and all 10 services reached healthy)*
-- [~] Push to GitHub (public) *(user requested publish on 2026-05-23 — `kumarabhik`)*
+- [x] Push to GitHub (public) *(public repo created at `https://github.com/kumarabhik/ollivelogs`; current published branch is `submission`)*
 - [ ] Email `work@ollive.ai` with repo + notes + demo link
 
 ---
