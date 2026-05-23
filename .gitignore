@@ -6,6 +6,10 @@
 *.key
 !.env.example
 
+# Local-only notes (not for submission)
+explanation.md
+SYSTEM.md
+
 # Python
 __pycache__/
 *.py[cod]
@@ -78,3 +82,4 @@ volumes/
 # Misc
 tmp/
 .cache/
+tmp-provider-cookies*.txt

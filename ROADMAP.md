@@ -45,7 +45,7 @@ Rules:
 - [x] Alembic configured under `db/migrations/`
 - [x] Migration `0001_init`: users, conversations, messages, messages_full (per DESIGN.md §4.1)
 - [x] Seed script: 3 users, 5 conversations, ~30 messages
-- [x] `make seed` works *(verified — `docker compose exec chat-api python -m db.seed` returns counts; idempotent on users via ON CONFLICT, conversations/messages append on rerun)*
+- [x] `make seed` works *(verified live with `python -m db.seed`: deterministic IDs keep users/conversations/messages stable across reruns; optional realistic dataset slice imports when `OLLIVE_SEED_DATASET_PATH` or `data/reddit-conversations.json` is present)*
 - [x] Integration test: insert / fetch a conversation *(plus check-constraint, trigger, uniqueness tests)*
 
 ## Phase 4 — ClickHouse schema
@@ -205,7 +205,7 @@ Rules:
 - [ ] Loom walkthrough (≤5 min): send chat, see dashboard, cancel, resume
 - [x] 6–8 screenshots in `docs/demo/`
 - [x] Final smoke test on clean checkout (`git clone && make dev`) *(verified from a fresh local `git clone` after copying `.env.example -> .env`; this Windows host lacks GNU `make`, so the equivalent `docker compose up -d --build` path was used and all 10 services reached healthy)*
-- [ ] Push to GitHub (public) *(waiting on user — `kumarabhik`)*
+- [~] Push to GitHub (public) *(user requested publish on 2026-05-23 — `kumarabhik`)*
 - [ ] Email `work@ollive.ai` with repo + notes + demo link
 
 ---
@@ -213,7 +213,7 @@ Rules:
 ## Datasets needed (waiting on human)
 
 - [ ] **Decision:** synthetic-only (Faker) or pull `microsoft/presidio-research` for PII eval? → human to choose.
-- [ ] **Optional:** small slice of `LMSYS-Chat-1M` for realistic demo conversations.
+- [x] **Optional:** integrate a small local conversation dataset for realistic demo conversations *(seed importer now supports `OLLIVE_SEED_DATASET_PATH` or repo-local `data/reddit-conversations.json`; verified against the human-provided Reddit slice at `..\Nemotron\chatbot\data\processed\reddit-conversations.json`)*
 
 ## Deferred / waiting on human
 

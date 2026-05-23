@@ -28,6 +28,12 @@ def api_client_factory(
             "DATABASE_URL": "postgresql+asyncpg://ollive:ollive@localhost:5432/ollivelogs",
             "REDIS_URL": "redis://localhost:6380/0",
             "STREAM_CHUNK_DELAY_MS": "10",
+            "HF_TOKEN": "",
+            "OPENAI_API_KEY": "",
+            "ANTHROPIC_API_KEY": "",
+            "GOOGLE_API_KEY": "",
+            "DEEPSEEK_API_KEY": "",
+            "XAI_API_KEY": "",
         }
         env.update(overrides or {})
         for key, value in env.items():
@@ -137,6 +143,29 @@ async def test_non_streaming_message_persists_and_counts_context_turns(
         "user",
         "assistant",
     ]
+
+
+@pytest.mark.asyncio
+async def test_first_user_message_sets_conversation_title_when_missing(
+    api_client: AsyncClient,
+) -> None:
+    create_response = await api_client.post("/v1/conversations", json={})
+    assert create_response.status_code == 200
+    conversation_id = create_response.json()["id"]
+
+    prompt = "Please help me compare Redis Streams and Kafka for OlliveLogs."
+    send_response = await api_client.post(
+        f"/v1/conversations/{conversation_id}/messages",
+        json={"content": prompt, "stream": False},
+    )
+    assert send_response.status_code == 200
+
+    list_response = await api_client.get("/v1/conversations")
+    assert list_response.status_code == 200
+    updated = next(
+        item for item in list_response.json()["items"] if item["id"] == conversation_id
+    )
+    assert updated["title"] == "Please help me compare Redis Streams and Kafka..."
 
 
 @pytest.mark.asyncio

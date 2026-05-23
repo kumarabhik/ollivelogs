@@ -1,5 +1,496 @@
 ﻿# SYSTEM.md — Agent Step Log
 
+## [2026-05-23 01:20 +05:30] — Codex — Prepared public GitHub publish
+
+**Roadmap item:** Phase 19 — `Push to GitHub (public)`
+
+**What I did:**
+
+- Marked the Phase 19 GitHub publish task as in progress in [ROADMAP.md](ROADMAP.md) after the user explicitly requested the public push.
+- Added `tmp-provider-cookies*.txt` to [.gitignore](.gitignore) so local auth artifacts stay out of the public repo.
+- Created a dedicated local `submission` branch so the publish flow does not push directly to `main`.
+- Created the public GitHub repository at <https://github.com/kumarabhik/ollivelogs>.
+- Prepared the current worktree for a clean commit-and-push snapshot.
+
+**Why:**
+
+- The user asked to publish the assignment repo to the `kumarabhik` GitHub account, and the safest path was to create the target repo first, ignore local credential artifacts, and publish from a non-`main` branch.
+
+**Files touched:**
+
+- `.gitignore`
+- `ROADMAP.md`
+- `SYSTEM.md`
+
+**Blocked on:** none.
+
+---
+
+## [2026-05-23 00:55 +05:30] — Codex — Added frontend to Docker Compose
+
+**Roadmap item:** none (DX/runtime improvement requested by user)
+
+**What I did:**
+
+- Added [apps/web/Dockerfile](apps/web/Dockerfile) so the Next.js frontend can be built and run as a container.
+- Added a root [.dockerignore](.dockerignore) to keep Compose builds from sending `.next`, `node_modules`, temp logs, and local data into the Docker context.
+- Added a `web` service to [docker-compose.yml](docker-compose.yml) that:
+  - publishes `3000:3000`
+  - waits for healthy `chat-api`
+  - injects `CHAT_API_PROXY_TARGET=http://chat-api:8001`
+  - exposes a Node-based healthcheck for the Next server
+- Updated [README.md](README.md) so the setup docs now accurately say that `make dev` / `docker compose up -d --build` bring up the browser UI too.
+- Verified end to end with `docker compose up -d --build`:
+  - `docker compose config --services` now includes `web`
+  - `ol-web` reached `healthy`
+  - `http://127.0.0.1:3000` returned `200`
+  - `http://127.0.0.1:3000/api/v1/conversations` returned `200` through the web container proxy
+
+**Why:**
+
+- The user wanted `docker compose up -d` to include the frontend instead of requiring a separate local `npm -w apps/web run dev`.
+
+**Files touched:**
+
+- `.dockerignore`
+- `apps/web/Dockerfile`
+- `docker-compose.yml`
+- `README.md`
+- `SYSTEM.md`
+
+**Blocked on:** none.
+
+---
+
+## [2026-05-22 22:48 +05:30] — Codex — Safe local shutdown
+
+**Roadmap item:** none (runtime shutdown only)
+
+**What I did:**
+
+- Stopped the full Docker stack with `docker compose down`, which cleanly removed the OlliveLogs containers and project network.
+- Stopped the repo-scoped Next.js dev server processes for `apps/web` so the local UI is no longer running on `127.0.0.1:3000`.
+- Verified shutdown state:
+  - `docker compose ps` is empty
+  - no listeners remain on the main app ports `3000`, `3001`, `8001`, `8002`, or `9090`
+
+**Why:**
+
+- The user needed everything brought down safely before stepping away.
+
+**Files touched:**
+
+- `SYSTEM.md`
+
+**Blocked on:** none.
+
+---
+
+## [2026-05-22 22:37 +05:30] — Codex — Full local stack refresh
+
+**Roadmap item:** none (runtime refresh only)
+
+**What I did:**
+
+- Recreated the Docker stack with `docker compose up -d --build --force-recreate` so `chat-api`, `ingest-api`, Redis, Postgres, ClickHouse, Grafana, Prometheus, Loki, and the OTel collector all picked up the current local `.env` and latest images.
+- Cleaned up the old Next.js dev process chain for `apps/web` and launched one fresh server on `127.0.0.1:3000`, logging to `tmp-web-dev-3000.out.log` and `tmp-web-dev-3000.err.log`.
+- Verified user-facing endpoints after restart:
+  - `http://127.0.0.1:3000` → `200`
+  - `http://127.0.0.1:8001/healthz` → `{"status":"ok","service":"chat-api"}`
+  - `http://127.0.0.1:8002/healthz` → `{"status":"ok","service":"ingest-api"}`
+- Waited for `log-consumer` to finish its first-start Presidio/spaCy model warmup (`en_core_web_lg` download) and confirmed it returned to `healthy`.
+
+**Why:**
+
+- The user asked to run the whole project again after updating provider credentials and wanted one clean, fresh instance instead of stale processes.
+
+**Files touched:**
+
+- `SYSTEM.md`
+
+**Blocked on:** none.
+
+---
+
+## [2026-05-22 23:15 +05:30] — Claude (Opus 4.7) — UI redesign #2: neobrutalist 3D gaming aesthetic
+
+**Roadmap item:** Phase 12 polish (visual rework, no roadmap items moved)
+
+**What I did:**
+
+- User shared a screenshot of Claude.ai's home + a neobrutalist signup form (cream/teal/orange/pink palette, hard offset `box-shadow: 3px 4px 0px 1px #E99F4C` styling, press-down focus). Request: **combine** the Claude layout with that brutal aesthetic, applied uniformly across the whole app.
+- Replaced the previous Claude-clean theme with a **locked neobrutalist palette** in `globals.css`:
+  - `--background`: `0 0% 91%` page bg (light gray)
+  - `--surface`: `12 38% 89%` cream `#EDDCD9`
+  - `--foreground`: `184 27% 21%` teal `#264143` (also used for ALL borders)
+  - `--primary`: `327 67% 60%` pink `#DE5499` (CTAs)
+  - `--accent`: `30 78% 60%` orange `#E99F4C` (the offset shadow color)
+  - `--user-bubble`: `30 78% 78%` lighter orange tint
+  - Dark variant: deep-teal bg with orange borders for contrast.
+- Encoded the brutal interaction system as CSS variables: `--brutal-shadow`, `--brutal-shadow-sm`, `--brutal-shadow-lg`, plus a `.brutal` / `.brutal-sm` component layer (hover lifts, focus presses down).
+- Added `font-display` (Fraunces serif) for greetings + headings — matches the Claude "Good evening" energy.
+- Tailwind: exposed `shadow-brutal`, `shadow-brutal-sm`, `shadow-brutal-lg`, `shadow-brutal-pressed`, `rounded-brutal`, `rounded-brutal-lg`, `border-brutal`, and `font-display` utilities so any surface can opt in with one class.
+- Rebuilt every UI primitive in the brutal language:
+  - `Button` — every variant gets 2px teal border + offset shadow + `translate-y` on focus/active. New `primary`/`accent` variants for pink + orange CTAs.
+  - `Card` — `border-2 border-foreground` + `shadow-brutal` + `rounded-brutal-lg`.
+  - `Input` — same brutal frame, presses down to `shadow-brutal-pressed` on focus.
+  - `Textarea` — transparent (the parent composer container carries the brutal shell).
+  - `ThemeToggle` — now uses the brutal Button variant.
+- Rewrote the chat workspace to match the Claude home reference:
+  - 270px sidebar with serif **"OlliveLogs"** wordmark, prominent pink "New chat" button, "Recents" section header, conversation rows that get a brutal border-2 + shadow on hover/active.
+  - Top bar with collapsible sidebar toggle, conversation title, provider/model pickers as brutal pills.
+  - Empty state: floating animated **"OL" mark** + serif **"Good evening, Abhishek"** greeting (Abhishek styled with a pink→orange→pink gradient text-clip), centered brutal composer underneath, 5 starter pills (`Code` / `Write` / `Learn` / `Brainstorm` / `OlliveLogs`) with the same press-down behavior.
+  - Conversation view: composer slides to the bottom of the main column once the first message is sent, messages render with avatar marks (pink "OL" for assistant, orange "YOU" for user), user messages in a user-bubble brutal frame.
+  - Streaming caret animation, fade-in on new messages, auto-scroll.
+- Dashboard mirrors the same look: brutal "Back to chat" pill, gradient stat cards with brutal frames, serif h1, source badge in orange.
+- Fixed an IDE error + 9 hints in workspace.tsx — added `aria-label`/`placeholder` to the rename input and `type="button"` to all non-submit `<button>` elements.
+- Resolved a Next.js `next/font` build error — Fraunces with `weight: [...]` is incompatible with `axes: [...]`, dropped the axes parameter.
+- **Verified live:**
+  - `npm -w apps/web run typecheck` — clean
+  - `npm -w apps/web run build` — clean (6 routes, `/dashboard` Dynamic, build size: home 8.45kB / dashboard 106kB)
+  - Restarted dev server on `:3010` with cleared `.next/cache`. The rendered HTML now contains all 3 font variables (`__variable_f367f3 __variable_6d24ac __variable_acf54a` = Inter + JetBrains Mono + Fraunces), the **"OlliveLogs"** wordmark, "New chat" button, **"Abhishek"** in the greeting, "How can I help you today?" composer, and compiled brutal utility classes (`shadow-brutal`).
+  - `/dashboard` returns 200 and ships the brutal header + serif heading.
+
+**Why:**
+
+- The previous "clean Claude" iteration was nice but unremarkable. The user wanted personality — the neobrutalist 3D look reads instantly: "this person designed it on purpose." Same Claude home layout, same conversation flow, but every surface has a deliberate, satisfying click.
+
+**Files touched:**
+
+- `apps/web/src/app/globals.css`
+- `apps/web/tailwind.config.ts`
+- `apps/web/src/app/layout.tsx`
+- `apps/web/src/components/theme-toggle.tsx`
+- `apps/web/src/components/ui/button.tsx`
+- `apps/web/src/components/ui/card.tsx`
+- `apps/web/src/components/ui/input.tsx`
+- `apps/web/src/components/ui/textarea.tsx`
+- `apps/web/src/components/chat/workspace.tsx` *(full rewrite of render)*
+- `apps/web/src/app/dashboard/dashboard-client.tsx` *(brutal header + Stat card refresh)*
+- `SYSTEM.md`
+
+**Follow-ups / open questions:**
+
+- Markdown rendering inside assistant messages is still `whitespace-pre-wrap` only. `react-markdown` + a Prism/Shiki code-block theme tuned to the brutal palette is the natural next step.
+- Reduced-motion users get the `.float-tilt` empty-state animation by default — should add a `@media (prefers-reduced-motion)` guard.
+- Greeting hardcodes "Abhishek" — should pull from the session user once we wire real auth.
+
+**Blocked on:** none.
+
+---
+
+## [2026-05-22 22:30 +05:30] — Claude (Opus 4.7) — UI redesign: Claude.ai / ChatGPT-style
+
+**Roadmap item:** Phase 12 polish (out-of-scope improvement)
+**State change:** none on roadmap (visual rework)
+
+**What I did:**
+
+- Replaced the dark olive-green "gaming" theme with a clean **Claude.ai-inspired warm-neutral palette** (light) and a **ChatGPT-style charcoal** dark variant.
+  - New tokens: `--background` warm cream, `--surface` white, `--sidebar` subtle warmth, `--primary` warm coral, `--user-bubble` cream tint.
+  - `.dark` selector flips every token (charcoal `220 5% 11%` bg, `0 0% 96%` fg).
+  - System theme detected by inline pre-paint script in `<head>` (no FOUC). `localStorage` override via theme-toggle button.
+- Switched typography to **Inter** (sans) + **JetBrains Mono** (mono) via `next/font/google`; removed Space Grotesk + IBM Plex Mono.
+- Tailwind config: enabled `darkMode: ["class"]`, added `surface` / `sidebar` / `userBubble` tokens, swapped `--radius` from `1.4rem` → `0.75rem` for tighter Claude-style corners, added `shadow-soft` and `shadow-lift`.
+- Refined UI primitives:
+  - `Button` — flatter radius, new `primary` variant (coral), `default` is foreground/background invert.
+  - `Card` — removed heavy backdrop-blur + glow; subtle border + soft shadow.
+  - `Input` / `Textarea` — neutral surface bg, focus ring uses ring/30 opacity.
+- Wrote `components/theme-toggle.tsx` — Sun/Moon icon button, persists choice, hydrates from system preference.
+- **Full rewrite of `components/chat/workspace.tsx`** (preserves all handlers from Codex's version — `streamMessage`, `cancelConversation`, optimistic UI, rename/delete, etc.):
+  - 260px **collapsible sidebar** with "OlliveLogs" wordmark, "New chat" button, conversation list (hover-reveal rename/delete), bottom row with Dashboard link + theme toggle.
+  - Top bar with conversation title, sidebar toggle, **provider picker** (HuggingFace/OpenAI/Anthropic/Gemini/DeepSeek/Grok) + **model picker** (dynamic based on provider) using accessible `<details>` dropdowns — no JS framework dep.
+  - **Claude-style message rendering**: assistant messages with `OL` avatar + indented prose (no bubble); **user messages right-aligned with subtle cream bubble**.
+  - Streaming caret animation (`streaming-cursor::after`) appears on the last in-flight assistant message.
+  - **Pill composer** at bottom with auto-resizing textarea, embedded send button on right (foreground-color circle with `ArrowUp`); becomes a stop button (square) while streaming.
+  - Enter sends, Shift+Enter newlines (matches Claude/GPT).
+  - **Empty state** with greeting + 4 starter prompts, click-to-fill.
+  - Auto-scroll to bottom on new tokens via ref + `scrollIntoView({behavior:"smooth"})`.
+- Restyled `/dashboard` with sticky top bar carrying "Back to chat" link + source badge + theme toggle. Cards auto-inherit the new neutral palette via existing semantic tokens.
+- **Verified**: `npm -w apps/web run typecheck` clean; `npm -w apps/web run build` clean (6 routes, /dashboard correctly marked Dynamic); `npm -w apps/web run dev` on port 3010 returned 200 for `/`, `/dashboard`, and `/api/v1/conversations` (proxy to live chat-api at :8001).
+
+**Why:**
+
+- User asked for a Claude.ai / ChatGPT-style UI. The previous theme was a dark olive-green "gaming" look that didn't match the assignment's professional bar.
+
+**Files touched:**
+
+- `apps/web/src/app/globals.css`
+- `apps/web/tailwind.config.ts`
+- `apps/web/src/app/layout.tsx`
+- `apps/web/src/components/theme-toggle.tsx` *(new)*
+- `apps/web/src/components/ui/button.tsx`
+- `apps/web/src/components/ui/card.tsx`
+- `apps/web/src/components/ui/input.tsx`
+- `apps/web/src/components/ui/textarea.tsx`
+- `apps/web/src/components/chat/workspace.tsx` *(full rewrite of render, ~500 lines)*
+- `apps/web/src/app/dashboard/dashboard-client.tsx` *(header + theme toggle)*
+- `SYSTEM.md`
+
+**Follow-ups / open questions:**
+
+- Markdown rendering inside assistant messages is currently `whitespace-pre-wrap` only — for full parity with Claude/GPT we'd want `react-markdown` + `rehype-highlight` for code blocks. Easy follow-up.
+- The provider/model picker uses `<details>` (no third-party deps); click-outside-to-close comes free from the browser. For stricter keyboard control we'd swap to Radix Popover.
+- Dashboard chart axis labels still inherit Recharts defaults — fine for now; could theme them later.
+
+**Blocked on:** none.
+
+---
+
+## [2026-05-22 21:20 +05:30] — Codex — Runtime verification for live UI preview
+
+**Roadmap item:** none (runtime verification only)
+**State change:** no roadmap checkbox changes
+
+**What I did:**
+
+- Verified the Docker application stack is still healthy with `docker compose ps`:
+  - `chat-api`, `ingest-api`, `log-consumer`, `postgres`, `redis`, `clickhouse`, `grafana`, `prometheus`, `loki`, and `otel-collector` are up
+- Started the Next.js web app locally in real-backend mode using:
+  - `CHAT_API_PROXY_TARGET=http://127.0.0.1:8001`
+  - `CLICKHOUSE_URL=http://127.0.0.1:8123`
+- Confirmed the web UI is serving at `http://localhost:3000` with HTTP `200`
+- Captured the dev-server log under `tmp/web-dev.log`
+- Kept `SYSTEM.md` as a local-only change per the user's request not to commit it
+
+**Why:**
+
+- The user wanted to preview the app live, so I verified the backend stack and brought the web UI up against the real local services instead of the mock frontend API.
+
+**Files touched:**
+
+- `SYSTEM.md`
+
+**Verification:**
+
+- `docker compose ps`
+- `Start-Process npm.cmd -ArgumentList '-w','apps/web','run','dev' ...`
+- `Invoke-WebRequest http://localhost:3000` -> `200`
+- `tmp/web-dev.log` shows `Ready in 10.3s`
+
+**Follow-ups / remaining blockers:**
+
+- None. The app is ready for browser preview at `http://localhost:3000`.
+
+## [2026-05-22 22:18 +05:30] — Codex — Stream fallback fix, auto-titles, and assistant copy action
+
+**Roadmap item:** none (bug fix + UI polish)
+**State change:** no roadmap checkbox changes
+
+**What I did:**
+
+- Fixed the streaming fallback bug in `apps/chat-api/app/main.py`:
+  - `_run_stream(...)` now tracks whether any real provider chunks have already been emitted
+  - local demo fallback is only allowed when **no** real output was emitted
+  - this prevents `[demo/...]\nContext turns: ...` from being appended after a real model has already started streaming
+- Added GPT/Claude-style first-message auto-titles:
+  - `_derive_conversation_title(...)` in `apps/chat-api/app/main.py`
+  - `repository.update_conversation_title_if_missing(...)` in `apps/chat-api/app/repository.py`
+  - the first user prompt now persists a readable truncated conversation title when the conversation was created untitled
+- Updated the chat UI in `apps/web/src/components/chat/workspace.tsx`:
+  - added the same title-derivation logic for optimistic display
+  - header title now falls back to the first user message while the backend title is catching up
+  - added a floating assistant-message `Copy` button under each non-empty assistant response
+  - the button uses the repo's brutal border/shadow style and adds a glow ring on hover
+  - the button flips to `Copied` with a check icon after a successful clipboard write
+- Added backend test coverage:
+  - `tests/unit/test_provider_failover.py` now proves partial real output does **not** get a demo fallback appended
+  - `tests/integration/test_chat_api.py` now proves untitled conversations get a stored derived title after the first message
+- Rebuilt and restarted `chat-api`, then smoke-tested a real streaming call with the rebuilt backend.
+
+**Why:**
+
+- The user reported two real product issues:
+  - model responses were getting polluted by local demo fallback text after the real answer
+  - the history list kept showing `Untitled` instead of GPT/Claude-style conversation names
+- They also asked for a polished copy affordance under responses that matches the existing UI language.
+
+**Files touched:**
+
+- `apps/chat-api/app/main.py`
+- `apps/chat-api/app/repository.py`
+- `apps/web/src/components/chat/workspace.tsx`
+- `tests/unit/test_provider_failover.py`
+- `tests/integration/test_chat_api.py`
+- `SYSTEM.md`
+
+**Verification:**
+
+- `python -m pytest tests/unit/test_provider_failover.py tests/integration/test_chat_api.py -q`
+- `python -m ruff check apps/chat-api/app tests/unit/test_provider_failover.py tests/integration/test_chat_api.py`
+- `python -m mypy apps/chat-api/app tests/unit/test_provider_failover.py tests/integration/test_chat_api.py`
+- `npm -w apps/web run typecheck`
+- `docker compose up -d --build chat-api`
+- live smoke:
+  - created an untitled conversation
+  - streamed a real response
+  - verified the persisted title was `Compare Redis Streams and Kafka for OlliveLogs...`
+  - verified `contains_demo_fallback: false`
+
+**Follow-ups / remaining blockers:**
+
+- `SYSTEM.md` remains local-only and should stay out of commits per the user's earlier instruction.
+
+## [2026-05-22 22:05 +05:30] — Codex — Full local restart, port cleanup, and real-provider smoke test
+
+**Roadmap item:** none (runtime verification only)
+**State change:** no roadmap checkbox changes
+
+**What I did:**
+
+- Re-ran the full Docker stack with `docker compose up -d` after the user's local `.env` API-key updates.
+- Identified that multiple stale Next.js dev servers from this workspace were still running on ports `3000`, `3002`, `3003`, and an auto-shifted instance on `3010`.
+- Stopped the stale workspace-owned `next dev` processes and restarted one clean web dev server on `127.0.0.1:3000`.
+- Verified the fresh web UI server with:
+  - `GET /` -> `200`
+  - `GET /api/v1/conversations` -> `200`
+- Ran a direct `chat-api` smoke test:
+  - created a conversation
+  - posted a non-streaming message requesting Hugging Face / `Qwen/Qwen2.5-72B-Instruct`
+  - received a real assistant reply (`Hello!`) instead of the local demo fallback
+- The smoke response showed provider failover is active: the backend resolved the request through `openai / gpt-4.1-mini`, which is acceptable runtime behavior given the configured failover chain.
+
+**Why:**
+
+- The user asked to "run everything again" after filling in provider keys and wanted to know why the UI had moved to `3010`. The root cause was stale local Next dev servers holding earlier ports, causing subsequent runs to auto-increment.
+
+**Files touched:**
+
+- `SYSTEM.md`
+
+**Verification:**
+
+- `docker compose up -d`
+- `netstat -ano | findstr :3000`
+- `Get-CimInstance Win32_Process` to identify workspace-owned Next.js processes
+- restarted Next dev on `127.0.0.1:3000`
+- `Invoke-WebRequest http://127.0.0.1:3000` -> `200`
+- `Invoke-WebRequest http://127.0.0.1:3000/api/v1/conversations` -> `200`
+- direct `chat-api` message smoke returned:
+  - provider: `openai`
+  - model: `gpt-4.1-mini`
+  - assistant content: `Hello!`
+
+**Follow-ups / remaining blockers:**
+
+- `SYSTEM.md` remains a local-only working-tree change per the user's earlier instruction not to commit it.
+
+## [2026-05-22 21:48 +05:30] — Codex — Local HF token load into chat-api
+
+**Roadmap item:** none (runtime configuration only)
+**State change:** no roadmap checkbox changes
+
+**What I did:**
+
+- Updated the local `.env` `HF_TOKEN` entry with the user-provided Hugging Face token.
+- Restarted `chat-api` with `docker compose up -d chat-api` so the running container picked up the new environment value.
+- Verified inside the container that `HF_TOKEN` is now non-empty without printing the secret value back out.
+
+**Why:**
+
+- The app was falling back to the local demo provider because all upstream provider keys were missing. Loading `HF_TOKEN` is the fastest path to real Hugging Face responses in the current UI setup.
+
+**Files touched:**
+
+- `.env`
+- `SYSTEM.md`
+
+**Verification:**
+
+- `docker compose up -d chat-api`
+- `docker compose exec -T chat-api sh -lc 'printenv HF_TOKEN | wc -c'` -> non-zero length
+- `docker compose ps chat-api` -> healthy
+
+**Follow-ups / remaining blockers:**
+
+- If the browser still shows demo-style responses, the next likely causes are invalid token, missing inference permission, or Hugging Face account/billing restrictions rather than missing local configuration.
+
+## [2026-05-22 21:26 +05:30] — Codex — Provider/model dropdown option contrast fix
+
+**Roadmap item:** none (UI polish only)
+**State change:** no roadmap checkbox changes
+
+**What I did:**
+
+- Updated the native provider and model `<option>` elements in `apps/web/src/components/chat/workspace.tsx` to use `className="bg-white text-black"`.
+- This keeps the closed select control dark while making the opened dropdown menu readable on the default white native option background.
+
+**Why:**
+
+- The opened provider dropdown was inheriting the light foreground color from the dark theme, which made the option text nearly invisible against the browser's white native menu background.
+
+**Files touched:**
+
+- `apps/web/src/components/chat/workspace.tsx`
+- `SYSTEM.md`
+
+**Verification:**
+
+- Live Next.js dev server is already running at `http://localhost:3000`; this change hot-reloads in the browser on refresh.
+
+**Follow-ups / remaining blockers:**
+
+- None.
+
+## [2026-05-22 21:05 +05:30] — Codex — Local dataset-backed demo seed import
+
+**Roadmap item:** `Datasets needed` realistic demo-conversation slice, plus the existing seed-path verification note
+**State change:** 1 item `[~]` -> `[x]`; updated the Phase 3 seed note to reflect the new deterministic rerun behavior
+
+**What I did:**
+
+- Inspected the human-provided dataset in `..\Nemotron\chatbot\data\processed\reddit-conversations.json` and mapped its schema (`id`, `topic`, `turns[{role,text}]`) onto the repo's chat seed model.
+- Added `db/seed/conversations.py`:
+  - normalized dataset roles (`customer -> user`, `agent -> assistant`)
+  - added deterministic UUID generation for seeded conversations/messages/events
+  - added optional dataset resolution from `OLLIVE_SEED_DATASET_PATH` or repo-local `data/reddit-conversations.json`
+  - kept the built-in lightweight synthetic seed as the fallback when no dataset is present
+- Reworked `db/seed/__main__.py` to consume the normalized seed model and write deterministic conversation/message rows.
+- Fixed a real rerun bug found during live verification: message inserts now use `ON CONFLICT DO NOTHING` so seeded reruns are stable across both `id` and `event_id` uniqueness constraints.
+- Added `tests/unit/test_seed_conversations.py` covering:
+  - dataset role mapping and title extraction
+  - synthetic + dataset merge behavior
+  - repo-local `data/` auto-discovery
+  - deterministic UUID generation
+- Added seed-related env knobs to `.env.example`:
+  - `OLLIVE_SEED_DATASET_ENABLED`
+  - `OLLIVE_SEED_DATASET_PATH`
+  - `OLLIVE_SEED_DATASET_LIMIT`
+  - `OLLIVE_SEED_DATASET_MODEL`
+- Updated `README.md` with the realistic demo-conversation import flow and example usage against the provided Reddit slice.
+- Updated `ROADMAP.md`:
+  - closed the realistic demo-conversation dataset item
+  - corrected the older Phase 3 seed note so it no longer claims conversations/messages append on rerun
+
+**Why:**
+
+- The user supplied a real local chatbot dataset, and the cleanest high-value use for it was improving seeded demo conversations without making the repo depend on a checked-in large file. This keeps the repo portable, uses the human-provided data immediately, and makes the demo state more realistic.
+
+**Files touched:**
+
+- `db/__init__.py`
+- `db/seed/conversations.py`
+- `db/seed/__main__.py`
+- `tests/unit/test_seed_conversations.py`
+- `.env.example`
+- `README.md`
+- `ROADMAP.md`
+
+**Verification:**
+
+- `python -m pytest tests/unit/test_seed_conversations.py -q`
+- `python -m ruff check db/seed tests/unit/test_seed_conversations.py`
+- `python -m mypy db/seed tests/unit/test_seed_conversations.py`
+- Live seed against the running Postgres:
+  - `OLLIVE_SEED_DATASET_PATH=..\Nemotron\chatbot\data\processed\reddit-conversations.json python -m db.seed`
+  - repeated the same command twice and confirmed counts stayed stable at `users=122, conversations=132, messages=273`
+  - queried one imported dataset conversation by deterministic UUID and confirmed it exists with `3` messages
+
+**Follow-ups / remaining blockers:**
+
+- The seed importer is intentionally limited to a small slice (`OLLIVE_SEED_DATASET_LIMIT`, default `6`) so local demos stay fast.
+- The separate `Datasets needed` decision for an external PII-eval corpus is still open; only the realistic demo-conversation dataset item is now closed.
+
 ## [2026-05-22 20:00 +05:30] — Codex — Coverage closure, failover/alerts, pgcrypto verification, repo bootstrap
 
 **Roadmap item:** Phase 1 bootstrap, Phase 10 pgcrypto verification, Phase 17 quality gates, Phase 19 clean-checkout smoke, and the next feasible backlog slice

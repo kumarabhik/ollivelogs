@@ -88,7 +88,8 @@ class OpenAICompatibleProvider(Provider):
                     if usage_data
                     else None
                 )
-                choice = data.get("choices", [{}])[0]
+                choices = data.get("choices") or []
+                choice = choices[0] if choices else {}
                 delta = _extract_openai_text(choice.get("delta", {}).get("content"))
                 finish_reason = choice.get("finish_reason")
                 if delta or usage or finish_reason:

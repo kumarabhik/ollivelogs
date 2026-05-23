@@ -3,26 +3,38 @@ import { forwardRef } from "react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * Brutal button — every variant gets the hard teal border + offset orange
+ * shadow, "presses down" on focus/active via translate-y.
+ */
 export const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-full text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
+  [
+    "inline-flex items-center justify-center gap-2 font-semibold transition-all duration-100",
+    "border-2 border-foreground",
+    "shadow-brutal-sm",
+    "hover:-translate-y-px hover:shadow-brutal",
+    "active:translate-y-1 active:shadow-brutal-pressed",
+    "focus-visible:translate-y-1 focus-visible:shadow-brutal-pressed focus-visible:outline-none",
+    "disabled:pointer-events-none disabled:opacity-50 disabled:shadow-brutal-pressed",
+  ],
   {
     variants: {
       variant: {
-        default:
-          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "text-foreground hover:bg-white/10",
-        outline:
-          "border border-border bg-transparent text-foreground hover:bg-white/5",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        default: "bg-surface text-foreground",
+        primary: "bg-primary text-primary-foreground",
+        secondary: "bg-secondary text-secondary-foreground",
+        accent: "bg-accent text-accent-foreground",
+        ghost:
+          "border-transparent shadow-none hover:translate-y-0 hover:bg-muted hover:shadow-none active:bg-muted active:shadow-none focus-visible:translate-y-0 focus-visible:shadow-none",
+        outline: "bg-transparent text-foreground",
+        destructive: "bg-destructive text-destructive-foreground",
       },
       size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 px-3",
-        lg: "h-11 px-5",
-        icon: "h-10 w-10",
+        default: "h-10 px-4 text-sm rounded-brutal",
+        sm: "h-8 px-3 text-xs rounded-md",
+        lg: "h-12 px-5 text-base rounded-brutal",
+        icon: "h-10 w-10 rounded-brutal",
+        "icon-sm": "h-8 w-8 rounded-md",
       },
     },
     defaultVariants: {

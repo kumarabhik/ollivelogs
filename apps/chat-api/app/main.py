@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -29,6 +30,7 @@ from app.observability import install_observability, metrics_response
 from app.providers import (
     CompletionResult,
     CompletionUsage,
+    ContextMessage,
     GenerationRequest,
     Provider,
     ProviderConfigurationError,
@@ -90,6 +92,18 @@ class StreamExecutionChunk:
     provider_name: str
     model_name: str
     provider: Provider
+
+
+def _derive_conversation_title(text: str, *, max_length: int = 48) -> str:
+    normalized = " ".join(text.split())
+    if normalized == "":
+        return "New chat"
+    if len(normalized) <= max_length:
+        return normalized
+    clipped = normalized[: max_length + 1].rsplit(" ", 1)[0].rstrip(" ,.;:-")
+    if clipped == "":
+        clipped = normalized[:max_length].rstrip(" ,.;:-")
+    return f"{clipped}..."
 
 
 def create_app() -> FastAPI:
@@ -232,40 +246,62 @@ def create_app() -> FastAPI:
         model_name = payload.model or conversation.model_default or app_settings.default_model
         input_tokens = provider.count_tokens(payload.content, model_name)
 
-        await rate_limiter.enforce_request_limit(
-            redis_client,
-            actor=current_user,
-            bucket="messages:send",
-            request_limit=app_settings.rate_limit_per_min,
-        )
-        await rate_limiter.enforce_token_limit(
-            redis_client,
-            actor=current_user,
-            bucket="messages:send",
-            token_limit=app_settings.rate_limit_tokens_per_min,
-            token_cost=input_tokens,
-        )
-
-        await _clear_cancel_flag(redis_client, conversation_id)
-        await repository.update_conversation_status(
-            postgres_pool,
-            conversation_id,
-            current_user.user_id,
-            "active",
+        # Rate limits run together and gate everything else (fail-fast).
+        await asyncio.gather(
+            rate_limiter.enforce_request_limit(
+                redis_client,
+                actor=current_user,
+                bucket="messages:send",
+                request_limit=app_settings.rate_limit_per_min,
+            ),
+            rate_limiter.enforce_token_limit(
+                redis_client,
+                actor=current_user,
+                bucket="messages:send",
+                token_limit=app_settings.rate_limit_tokens_per_min,
+                token_cost=input_tokens,
+            ),
         )
 
-        user_message = await repository.insert_message(
-            postgres_pool,
-            conversation_id,
-            "user",
-            payload.content,
-            token_count=input_tokens,
+        # All independent setup work concurrently. Prior context is fetched
+        # without the new user message — we append it in memory below, which
+        # saves a sequential DB round trip after insert.
+        _, _, user_message, previous_context = await asyncio.gather(
+            _clear_cancel_flag(redis_client, conversation_id),
+            repository.update_conversation_status(
+                postgres_pool,
+                conversation_id,
+                current_user.user_id,
+                "active",
+            ),
+            repository.insert_message(
+                postgres_pool,
+                conversation_id,
+                "user",
+                payload.content,
+                token_count=input_tokens,
+            ),
+            repository.fetch_context_messages(
+                postgres_pool,
+                conversation_id,
+                app_settings.chat_context_turns,
+            ),
         )
-        context_messages = await repository.fetch_context_messages(
-            postgres_pool,
-            conversation_id,
-            app_settings.chat_context_turns,
+
+        # Title update doesn't gate the stream — push it to the background.
+        asyncio.create_task(
+            repository.update_conversation_title_if_missing(
+                postgres_pool,
+                conversation_id,
+                current_user.user_id,
+                _derive_conversation_title(payload.content),
+            )
         )
+
+        context_messages = [
+            *previous_context,
+            ContextMessage(role="user", content=payload.content),
+        ]
         context_turns = repository.count_context_turns(context_messages)
         generation = GenerationRequest(
             provider=provider_name,
@@ -814,6 +850,7 @@ async def _run_stream(
     app_settings: Settings,
 ) -> AsyncIterator[StreamExecutionChunk]:
     last_exc: Exception | None = None
+    emitted_any_chunks = False
     for attempt in _provider_attempts(
         provider_name=provider_name,
         model_name=model_name,
@@ -826,6 +863,7 @@ async def _run_stream(
         try:
             async for chunk in attempt.provider.stream(attempt.generation):
                 emitted_chunks = True
+                emitted_any_chunks = True
                 yield StreamExecutionChunk(
                     chunk=chunk,
                     provider_name=attempt.provider_name,
@@ -846,7 +884,7 @@ async def _run_stream(
                 },
             )
 
-    if app_settings.app_env == "local":
+    if app_settings.app_env == "local" and not emitted_any_chunks:
         log.warning("provider_stream_fallback", exc_info=last_exc)
         demo_generation = replace(
             generation,
@@ -863,7 +901,11 @@ async def _run_stream(
         return
     if isinstance(last_exc, ProviderUpstreamError):
         raise last_exc
-    raise ProviderUpstreamError("Requested provider is not configured.") from last_exc
+    if isinstance(last_exc, ProviderConfigurationError):
+        raise ProviderUpstreamError("Requested provider is not configured.") from last_exc
+    if last_exc is not None:
+        raise ProviderUpstreamError(f"Provider stream failed: {last_exc}") from last_exc
+    raise ProviderUpstreamError("Requested provider is not configured.")
 
 
 def _provider_attempts(

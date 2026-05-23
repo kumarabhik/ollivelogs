@@ -37,13 +37,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: {{ .Release.Name }}-config
+          # spaCy/Presidio model warm-up can take several minutes on first
+          # boot. startupProbe gates liveness/readiness until /healthz returns.
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 60   # up to ~10 minutes for model download
           readinessProbe:
             httpGet: { path: /readyz, port: http }
-            initialDelaySeconds: 10
             periodSeconds: 5
           livenessProbe:
             httpGet: { path: /healthz, port: http }
-            initialDelaySeconds: 30
             periodSeconds: 15
           # Graceful drain: SIGTERM → worker stops pulling new batches and
           # acks in-flight before the container exits.

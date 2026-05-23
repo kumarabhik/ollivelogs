@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
-from app.main import _run_completion, _run_stream
+from app.main import StreamExecutionChunk, _run_completion, _run_stream
 from app.providers import (
     CompletionResult,
     CompletionUsage,
@@ -176,3 +176,51 @@ async def test_run_stream_retries_with_failover_provider_before_first_chunk() ->
     assert chunks[0].provider_name == "anthropic"
     assert chunks[0].model_name == "claude-sonnet-4-20250514"
     assert chunks[0].chunk.delta == "Hello"
+
+
+@pytest.mark.asyncio
+async def test_run_stream_does_not_append_demo_fallback_after_partial_real_output() -> None:
+    generation = GenerationRequest(
+        provider="huggingface",
+        model="Qwen/Qwen2.5-72B-Instruct",
+        prompt="hello",
+        context=[],
+        context_turns=1,
+        max_tokens=64,
+    )
+
+    class PartialFailureProvider(FakeProvider):
+        async def stream(self, request: GenerationRequest) -> AsyncIterator[ProviderStreamChunk]:
+            if self._expected_model is not None:
+                assert request.model == self._expected_model
+                assert request.provider == self.name
+            yield ProviderStreamChunk(delta="Hello! ")
+            raise ProviderUpstreamError("stream dropped mid-response")
+
+    provider = PartialFailureProvider(
+        name="huggingface",
+        expected_model="Qwen/Qwen2.5-72B-Instruct",
+    )
+    registry = ProviderRegistry(
+        providers={"huggingface": provider},
+        demo_provider=LocalDemoProvider(chunk_delay_ms=0),
+    )
+    settings = Settings(
+        app_env="local",
+        provider_failover_enabled=False,
+    )
+
+    yielded_chunks: list[StreamExecutionChunk] = []
+    with pytest.raises(ProviderUpstreamError, match="stream dropped mid-response"):
+        async for chunk in _run_stream(
+            provider_name="huggingface",
+            model_name="Qwen/Qwen2.5-72B-Instruct",
+            provider=provider,
+            generation=generation,
+            provider_registry=registry,
+            app_settings=settings,
+        ):
+            yielded_chunks.append(chunk)
+
+    assert [chunk.provider_name for chunk in yielded_chunks] == ["huggingface"]
+    assert yielded_chunks[0].chunk.delta == "Hello! "

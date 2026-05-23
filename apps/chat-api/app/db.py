@@ -29,7 +29,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     postgres_pool = await create_postgres_pool(settings)
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
-    http_client = httpx.AsyncClient(timeout=settings.provider_timeout_seconds)
+    http_client = httpx.AsyncClient(
+        timeout=settings.provider_timeout_seconds,
+        limits=httpx.Limits(
+            max_connections=100,
+            max_keepalive_connections=20,
+            keepalive_expiry=120.0,
+        ),
+    )
     pricing = PricingCatalog.from_repo_file()
     provider_registry = build_provider_registry(settings, http_client, pricing)
     inference_logger = build_inference_logger(settings)

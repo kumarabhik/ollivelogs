@@ -1,0 +1,70 @@
+# Minikube overrides — local dev cluster, no registry, no ingress, single replicas.
+# Apply with: helm install ollivelogs infra/helm/ollivelogs -f infra/helm/ollivelogs/values-minikube.yaml
+
+global:
+  imageRegistry: local
+  imageTag: "0.1.0"
+  imagePullPolicy: IfNotPresent  # locally-built app images already in minikube docker; third-party still pull from Docker Hub
+  storageClass: standard
+
+web:
+  replicas: 1
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits:   { cpu: 500m, memory: 384Mi }
+
+chatApi:
+  replicas: 1
+  autoscaling:
+    enabled: false
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 800m, memory: 768Mi }
+
+ingestApi:
+  replicas: 1
+  autoscaling:
+    enabled: false
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 800m, memory: 512Mi }
+
+logConsumer:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 800m, memory: 768Mi }
+
+postgres:
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits:   { cpu: 500m, memory: 512Mi }
+
+redis:
+  storage: 1Gi
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits:   { cpu: 300m, memory: 256Mi }
+
+clickhouse:
+  storage: 5Gi
+  resources:
+    requests: { cpu: 150m, memory: 512Mi }
+    limits:   { cpu: 1000m, memory: 1Gi }
+
+prometheus:
+  storage: 2Gi
+
+grafana:
+  storage: 1Gi
+
+# Skip log/trace pipeline locally to fit in 6GB
+loki:
+  enabled: false
+otelCollector:
+  enabled: false
+
+# Use kubectl port-forward instead of ingress on minikube
+ingress:
+  enabled: false

@@ -150,6 +150,31 @@ async def insert_message(
     return _message_from_row(cast(asyncpg.Record, row))
 
 
+async def update_conversation_title_if_missing(
+    pool: asyncpg.Pool,
+    conversation_id: UUID,
+    user_id: UUID,
+    title: str,
+) -> ConversationSummary | None:
+    row = await pool.fetchrow(
+        """
+        UPDATE conversations
+        SET title = $3, updated_at = now()
+        WHERE id = $1
+          AND user_id = $2
+          AND status <> 'archived'
+          AND (title IS NULL OR btrim(title) = '')
+        RETURNING id, user_id, title, status, model_default, created_at, updated_at
+        """,
+        conversation_id,
+        user_id,
+        title,
+    )
+    if row is None:
+        return None
+    return _conversation_from_row(row)
+
+
 async def fetch_context_messages(
     pool: asyncpg.Pool,
     conversation_id: UUID,

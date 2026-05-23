@@ -96,7 +96,7 @@ cp .env.example .env
 make dev
 ```
 
-That brings up: postgres, redis, clickhouse, grafana, prometheus, loki, otel-collector, chat-api, ingest-api, log-consumer.
+That brings up: web, postgres, redis, clickhouse, grafana, prometheus, loki, otel-collector, chat-api, ingest-api, log-consumer.
 
 URLs after `make dev`:
 
@@ -113,8 +113,33 @@ Then apply migrations + seed:
 
 ```bash
 make migrate     # alembic upgrade head
-make seed        # 3 users, 5 conversations, ~30 messages
+make seed        # synthetic demo seed, plus a small realistic dataset slice if configured
 ```
+
+If you want the seed to import realistic demo conversations, either:
+
+```bash
+# option 1: point at a local JSON dataset directly
+OLLIVE_SEED_DATASET_PATH=../Nemotron/chatbot/data/processed/reddit-conversations.json make seed
+
+# option 2: copy a compatible file under data/ as data/reddit-conversations.json
+make seed
+```
+
+The importer expects a JSON array with entries shaped like:
+
+```json
+{
+  "id": "reddit-dev_conv_000001",
+  "topic": "conversation title or topic",
+  "turns": [
+    { "role": "customer", "text": "..." },
+    { "role": "agent", "text": "..." }
+  ]
+}
+```
+
+When no dataset is present, the seed falls back to the built-in lightweight synthetic conversations.
 
 Smoke checks:
 
@@ -127,13 +152,15 @@ curl http://localhost:8001/v1/conversations | jq
 ### Running pieces independently
 
 ```bash
-# Frontend only (uses local mock API)
+# Frontend only (outside Docker, uses local mock API)
 npm install
 npm -w apps/web run dev
 
 # Frontend pointed at a real backend
 CHAT_API_PROXY_TARGET=http://127.0.0.1:8001 npm -w apps/web run dev
 ```
+
+If you want the browser UI inside Compose too, `make dev` and `docker compose up -d --build` now publish the Next.js app on `http://localhost:3000` and wire `/api/v1/*` to `chat-api` over the Docker network.
 
 ---
 

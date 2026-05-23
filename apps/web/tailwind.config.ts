@@ -1,12 +1,18 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: ["class"],
   content: [
     "./src/app/**/*.{ts,tsx}",
     "./src/components/**/*.{ts,tsx}",
     "./src/lib/**/*.{ts,tsx}",
   ],
   theme: {
+    container: {
+      center: true,
+      padding: "1rem",
+      screens: { "2xl": "1280px" },
+    },
     extend: {
       colors: {
         border: "hsl(var(--border))",
@@ -14,6 +20,11 @@ const config: Config = {
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        surface: "hsl(var(--surface))",
+        sidebar: {
+          DEFAULT: "hsl(var(--sidebar))",
+          foreground: "hsl(var(--sidebar-foreground))",
+        },
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -38,18 +49,28 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        userBubble: "hsl(var(--user-bubble))",
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+        brutal: "10px",
+        "brutal-lg": "20px",
+      },
+      borderWidth: {
+        brutal: "2px",
+      },
+      fontFamily: {
+        sans: ["var(--font-sans)", "Inter", "ui-sans-serif", "system-ui"],
+        mono: ["var(--font-mono)", "ui-monospace", "SF Mono", "Menlo"],
+        display: ["var(--font-display)", "Georgia", "serif"],
       },
       boxShadow: {
-        glow: "0 18px 48px rgba(28, 38, 24, 0.24)",
-      },
-      backgroundImage: {
-        haze:
-          "radial-gradient(circle at top left, rgba(182, 196, 140, 0.22), transparent 42%), radial-gradient(circle at bottom right, rgba(207, 162, 86, 0.16), transparent 34%)",
+        brutal: "4px 5px 0 1px hsl(var(--accent))",
+        "brutal-sm": "2px 3px 0 0 hsl(var(--accent))",
+        "brutal-lg": "6px 7px 0 1px hsl(var(--accent))",
+        "brutal-pressed": "1px 2px 0 0 hsl(var(--accent))",
       },
     },
   },

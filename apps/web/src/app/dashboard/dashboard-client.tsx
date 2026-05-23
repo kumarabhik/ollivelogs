@@ -16,7 +16,11 @@ import {
   YAxis,
 } from "recharts";
 
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { withTelemetryHeaders } from "@/lib/telemetry";
 
 type Summary = {
@@ -76,24 +80,46 @@ export default function DashboardClient({ initialSummary }: { initialSummary: Su
   }, []);
 
   return (
-    <main className="min-h-screen bg-background px-6 py-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex items-baseline justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Inference dashboard</h1>
-            <p className="text-sm text-muted-foreground">
-              Live counters from ClickHouse (`inference_logs`). Refresh every 15s.
-            </p>
-          </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className={refreshing ? "animate-pulse" : ""}>
+    <main className="min-h-screen bg-background">
+      <header className="sticky top-0 z-10 border-b-2 border-foreground bg-background">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+          <Link
+            href="/"
+            className="flex items-center gap-2 rounded-md border-2 border-foreground bg-surface px-3 py-1.5 text-sm font-semibold text-foreground shadow-brutal-sm transition-all duration-100 hover:-translate-y-px hover:shadow-brutal active:translate-y-1 active:shadow-brutal-pressed"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to chat
+          </Link>
+          <div className="flex items-center gap-3 text-xs">
+            <span className={refreshing ? "animate-pulse text-muted-foreground" : "text-muted-foreground"}>
               {refreshing ? "refreshing…" : "up to date"}
             </span>
-            <span className="rounded-full border px-2 py-0.5">
+            <span className="rounded-md border-2 border-foreground bg-accent px-2 py-0.5 font-bold text-accent-foreground shadow-brutal-sm">
               source: {summary.source}
             </span>
+            <ThemeToggle />
           </div>
-        </header>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-brutal border-2 border-foreground bg-primary text-base font-black text-primary-foreground shadow-brutal">
+            OL
+          </div>
+          <div>
+            <h1 className="font-display text-3xl font-bold tracking-tight">
+              Inference dashboard
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              Live counters from ClickHouse{" "}
+              <code className="rounded border-2 border-foreground bg-surface px-1.5 py-0.5 text-xs font-bold shadow-brutal-sm">
+                inference_logs
+              </code>
+              . Refresh every 15s.
+            </p>
+          </div>
+        </div>
 
         <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Requests (24h)" value={fmt(summary.totals.requests_24h)} />
@@ -254,14 +280,18 @@ export default function DashboardClient({ initialSummary }: { initialSummary: Su
 
 function Stat({ label, value, danger }: { label: string; value: string; danger?: boolean }) {
   return (
-    <Card>
+    <Card className={danger ? "bg-destructive/15" : ""}>
       <CardHeader className="pb-1">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <CardTitle className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
           {label}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className={`text-2xl font-semibold ${danger ? "text-red-500" : ""}`}>{value}</div>
+        <div
+          className={`font-display text-3xl font-bold ${danger ? "text-destructive" : "text-foreground"}`}
+        >
+          {value}
+        </div>
       </CardContent>
     </Card>
   );
